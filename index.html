@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mierenkolonie Simulatie</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #090a0f;
+            color: #e2e8f0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            touch-action: none;
+        }
+        /* Custom scrollbar & sliders */
+        input[type="range"] {
+            -webkit-appearance: none;
+            appearance: none;
+            background: #1e293b;
+            height: 6px;
+            border-radius: 999px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #38bdf8;
+            cursor: pointer;
+            transition: transform 0.1s ease, background-color 0.15s ease;
+        }
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.15);
+            background: #7dd3fc;
+        }
+        .tool-btn.active {
+            background: linear-gradient(135deg, #0284c7, #2563eb);
+            border-color: #38bdf8;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.35);
+            color: white;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col md:flex-row">
+
+    <aside class="w-full md:w-80 bg-slate-900/95 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between p-4 z-10 shrink-0 overflow-y-auto max-h-[45vh] md:max-h-screen">
+        <div class="space-y-5">
+            <!-- Header -->
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h1 class="font-bold text-base text-white tracking-tight">Mierenkolonie</h1>
+                        <p class="text-xs text-slate-400">Feromoon & Pad-optimalisatie</p>
+                    </div>
+                </div>
+                <span id="fpsCounter" class="text-xs font-mono bg-slate-800 text-slate-300 px-2 py-1 rounded">60 FPS</span>
+            </div>
+
+            <!-- Live Statistieken -->
+            <div class="grid grid-cols-2 gap-2.5">
+                <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl p-3">
+                    <span class="text-xs text-slate-400 block">Verzameld Voedsel</span>
+                    <span id="statFood" class="text-xl font-bold text-emerald-400 font-mono">0</span>
+                </div>
+                <div class="bg-slate-800/70 border border-slate-700/60 rounded-xl p-3">
+                    <span class="text-xs text-slate-400 block">Dragers / Zoekers</span>
+                    <span id="statCarriers" class="text-xl font-bold text-amber-400 font-mono">0%</span>
+                </div>
+            </div>
+
+            <!-- Tekengereedschap -->
+            <div class="space-y-2">
+                <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 block">Teken op de kaart</label>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="setTool('food')" id="tool-food" class="tool-btn active flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-xs font-medium text-slate-200 transition">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span> Voedsel
+                    </button>
+                    <button onclick="setTool('wall')" id="tool-wall" class="tool-btn flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-xs font-medium text-slate-200 transition">
+                        <span class="w-2.5 h-2.5 rounded-full bg-slate-400"></span> Obstakel
+                    </button>
+                    <button onclick="setTool('erase')" id="tool-erase" class="tool-btn flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-xs font-medium text-slate-200 transition">
+                        <span class="w-2.5 h-2.5 rounded-full bg-rose-400"></span> Gum
+                    </button>
+                    <button onclick="setTool('nest')" id="tool-nest" class="tool-btn flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-700 bg-slate-800 text-xs font-medium text-slate-200 transition">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span> Verplaats Nest
+                    </button>
+                </div>
+            </div>
+
+            <!-- Sliders voor Gedrag -->
+            <div class="space-y-3.5 pt-1 border-t border-slate-800">
+                <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 block">Kolonie Parameters</label>
+
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">Aantal Mieren</span>
+                        <span id="valAnts" class="font-mono text-sky-400">500</span>
+                    </div>
+                    <input id="sliderAnts" type="range" min="100" max="1500" step="50" value="500" class="w-full">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">Verdampingssnelheid</span>
+                        <span id="valEvap" class="font-mono text-sky-400">Normaal</span>
+                    </div>
+                    <input id="sliderEvap" type="range" min="980" max="999" step="1" value="993" class="w-full">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">Sensor Bereik</span>
+                        <span id="valSensor" class="font-mono text-sky-400">14 px</span>
+                    </div>
+                    <input id="sliderSensor" type="range" min="6" max="28" step="1" value="14" class="w-full">
+                </div>
+
+                <div>
+                    <div class="flex justify-between text-xs mb-1">
+                        <span class="text-slate-300">Nieuwsgierigheid (Wander)</span>
+                        <span id="valWander" class="font-mono text-sky-400">0.22</span>
+                    </div>
+                    <input id="sliderWander" type="range" min="5" max="60" step="1" value="22" class="w-full">
+                </div>
+
+                <div class="flex items-center justify-between pt-1">
+                    <span class="text-xs text-slate-300">Toon Mierenlichamen</span>
+                    <input id="toggleAnts" type="checkbox" checked class="w-4 h-4 accent-sky-500 rounded cursor-pointer">
+                </div>
+            </div>
+
+            <!-- Legenda -->
+            <div class="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3 space-y-1.5 text-xs">
+                <div class="font-semibold text-slate-300 mb-1">Sporen Legenda</div>
+                <div class="flex items-center gap-2 text-slate-400">
+                    <span class="w-3 h-3 rounded bg-sky-500 inline-block"></span> Blauw feromoon: Pad terug naar nest
+                </div>
+                <div class="flex items-center gap-2 text-slate-400">
+                    <span class="w-3 h-3 rounded bg-rose-500 inline-block"></span> Rood/Oranje feromoon: Voedselroute
+                </div>
+                <div class="flex items-center gap-2 text-slate-400">
+                    <span class="w-3 h-3 rounded bg-emerald-400 inline-block"></span> Groene blokjes: Voedselbronnen
+                </div>
+            </div>
+        </div>
+
+        <!-- Actieknoppen -->
+        <div class="grid grid-cols-2 gap-2 pt-4 mt-4 border-t border-slate-800">
+            <button onclick="spawnMaze()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition">
+                Doolhof Test
+            </button>
+            <button onclick="clearPheromones()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 transition">
+                Wis Sporen
+            </button>
+            <button onclick="togglePause()" id="btnPause" class="px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold transition">
+                Pauzeer
+            </button>
+            <button onclick="resetSim()" class="px-3 py-2 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-xs font-semibold transition">
+                Reset Alles
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 relative bg-[#07080c] overflow-hidden" id="canvasContainer">
+        <canvas id="simCanvas"></canvas>
+
+        <!-- Zwevende hint rechtsboven -->
+        <div class="pointer-events-none absolute top-3 right-3 bg-slate-900/80 backdrop-blur border border-slate-800 px-3 py-1.5 rounded-lg text-xs text-slate-300 hidden sm:block">
+            Klik & sleep op het canvas om te tekenen • Rechtsklik plaatst direct voedsel
+        </div>
+    </main>
+
+    <script>
+        const canvas = document.getElementById('simCanvas');
+        const ctx = canvas.getContext('2d', { alpha: false });
+        const container = document.getElementById('canvasContainer');
+
+        // Simulatie instellingen
+        const scale = 4; // Elke gridcel is 4x4 pixels
+        let width = 800;
+        let height = 600;
+        let cols = 200;
+        let rows = 150;
+
+        // Data rasters
+        let homePheromones = new Float32Array(0);
+        let foodPheromones = new Float32Array(0);
+        let walls = new Uint8Array(0);
+        let foodGrid = new Uint8Array(0);
+
+        // Offscreen ImageData voor razendsnelle pixelweergave van feromonen
+        let gridCanvas = document.createElement('canvas');
+        let gridCtx = gridCanvas.getContext('2d');
+        let gridImgData = null;
+
+        // Parameters
+        let targetAntCount = 500;
+        let evaporationRate = 0.993;
+        let sensorDistance = 14;
+        let wanderStrength = 0.22;
+        let showAnts = true;
+        let isPaused = false;
+        let currentTool = 'food';
+
+        const nest = { x: 400, y: 300, radius: 18 };
+        let collectedFood = 0;
+        const ants = [];
+
+        class Ant {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                const angle = Math.random() * Math.PI * 2;
+                const dist = Math.random() * (nest.radius * 0.6);
+                this.x = nest.x + Math.cos(angle) * dist;
+                this.y = nest.y + Math.sin(angle) * dist;
+                this.angle = angle;
+                this.hasFood = false;
+                this.speed = 1.65 + Math.random() * 0.25;
+                this.pheromoneTimer = 1.0;
+                this.stepsSinceTurn = 0;
+            }
+
+            update() {
+                const sensorAngle = Math.PI / 4.2; // ~43 graden spreiding
+                const targetGrid = this.hasFood ? homePheromones : foodPheromones;
+
+                // Als de mier vlak bij het nest is en voedsel draagt, ruikt ze het nest direct
+                if (this.hasFood) {
+                    const distToNest = Math.hypot(nest.x - this.x, nest.y - this.y);
+                    if (distToNest < nest.radius + 45) {
+                        this.angle = Math.atan2(nest.y - this.y, nest.x - this.x);
+                    }
+                }
+
+                // Voel feromonen of voedsel met drie voelsprieten
+                const left = this.sense(targetGrid, -sensorAngle, sensorDistance);
+                const center = this.sense(targetGrid, 0, sensorDistance);
+                const right = this.sense(targetGrid, sensorAngle, sensorDistance);
+
+                const steerStrength = 0.28;
+
+                if (center > left && center > right && center > 0.01) {
+                    // Volg het spoor recht vooruit
+                } else if (left > right && left > 0.01) {
+                    this.angle -= steerStrength;
+                } else if (right > left && right > 0.01) {
+                    this.angle += steerStrength;
+                }
+
+                // Natuurlijke willekeurige verkenning
+                this.angle += (Math.random() - 0.5) * 2 * wanderStrength;
+
+                // Bereken nieuwe positie
+                let nextX = this.x + Math.cos(this.angle) * this.speed;
+                let nextY = this.y + Math.sin(this.angle) * this.speed;
+
+                let gx = Math.floor(nextX / scale);
+                let gy = Math.floor(nextY / scale);
+
+                // Botsingsdetectie met randen en muren
+                if (gx <= 0 || gx >= cols - 1 || gy <= 0 || gy >= rows - 1 || walls[gy * cols + gx] === 1) {
+                    // Probeer een vrije uitweg te zoeken in plaats van vast te lopen
+                    this.angle += Math.PI * 0.65 + (Math.random() - 0.5) * 0.8;
+                } else {
+                    this.x = nextX;
+                    this.y = nextY;
+                }
+
+                const currentIdx = Math.floor(this.y / scale) * cols + Math.floor(this.x / scale);
+
+                // Interactie met voedsel of nest
+                if (!this.hasFood) {
+                    if (foodGrid[currentIdx] > 0) {
+                        this.hasFood = true;
+                        foodGrid[currentIdx]--;
+                        this.angle += Math.PI; // Keer om richting huis
+                        this.pheromoneTimer = 1.0;
+                    }
+                } else {
+                    const distToNest = Math.hypot(this.x - nest.x, this.y - nest.y);
+                    if (distToNest < nest.radius) {
+                        this.hasFood = false;
+                        this.angle += Math.PI; // Keer terug richting voedselbron
+                        this.pheromoneTimer = 1.0;
+                        collectedFood++;
+                    }
+                }
+
+                // Vernieuw spoorsterkte wanneer de mier langs het nest loopt
+                if (!this.hasFood && Math.hypot(this.x - nest.x, this.y - nest.y) < nest.radius + 4) {
+                    this.pheromoneTimer = 1.0;
+                }
+
+                // Feromonen afscheiden (zwakt af naarmate het pad langer is)
+                this.pheromoneTimer *= 0.9965;
+                const deposit = 0.55 * this.pheromoneTimer;
+
+                if (currentIdx >= 0 && currentIdx < cols * rows && walls[currentIdx] === 0) {
+                    if (this.hasFood) {
+                        foodPheromones[currentIdx] = Math.min(1.0, foodPheromones[currentIdx] + deposit);
+                    } else {
+                        homePheromones[currentIdx] = Math.min(1.0, homePheromones[currentIdx] + deposit);
+                    }
+                }
+            }
+
+            sense(grid, angleOffset, dist) {
+                const a = this.angle + angleOffset;
+                const sx = Math.floor((this.x + Math.cos(a) * dist) / scale);
+                const sy = Math.floor((this.y + Math.sin(a) * dist) / scale);
+
+                if (sx <= 0 || sx >= cols - 1 || sy <= 0 || sy >= rows - 1) return -1;
+                const idx = sy * cols + sx;
+                if (walls[idx] === 1) return -1;
+
+                // Als de mier voedsel zoekt en direct voedsel voor zich ruikt, geef hoge prioriteit
+                if (!this.hasFood && foodGrid[idx] > 0) {
+                    return 10.0;
+                }
+                return grid[idx];
+            }
+
+            draw() {
+                const cos = Math.cos(this.angle);
+                const sin = Math.sin(this.angle);
+
+                // Achterlijf & kop voor een realistischer silhouet
+                ctx.fillStyle = this.hasFood ? '#fbbf24' : '#e2e8f0';
+                ctx.beginPath();
+                ctx.arc(this.x - cos * 2, this.y - sin * 2, 1.7, 0, Math.PI * 2);
+                ctx.arc(this.x + cos * 1.5, this.y + sin * 1.5, 1.2, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Als de mier voedsel draagt, teken een groen kruimeltje voor de kop
+                if (this.hasFood) {
+                    ctx.fillStyle = '#4ade80';
+                    ctx.beginPath();
+                    ctx.arc(this.x + cos * 3.4, this.y + sin * 3.4, 1.6, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function initGrid(preserveWorld = false) {
+            const rect = container.getBoundingClientRect();
+            width = Math.max(320, Math.floor(rect.width));
+            height = Math.max(320, Math.floor(rect.height));
+
+            canvas.width = width;
+            canvas.height = height;
+
+            cols = Math.floor(width / scale);
+            rows = Math.floor(height / scale);
+
+            gridCanvas.width = cols;
+            gridCanvas.height = rows;
+            gridImgData = gridCtx.createImageData(cols, rows);
+
+            homePheromones = new Float32Array(cols * rows);
+            foodPheromones = new Float32Array(cols * rows);
+            walls = new Uint8Array(cols * rows);
+            foodGrid = new Uint8Array(cols * rows);
+
+            if (!preserveWorld) {
+                nest.x = Math.floor(width * 0.25);
+                nest.y = Math.floor(height * 0.5);
+                seedInitialWorld();
+            } else {
+                nest.x = Math.min(width - 40, Math.max(40, nest.x));
+                nest.y = Math.min(height - 40, Math.max(40, nest.y));
+            }
+        }
+
+        function seedInitialWorld() {
+            // Plaats enkele rijke voedselclusters op interessante afstanden
+            spawnCircle(width * 0.75, height * 0.25, 7, 'food');
+            spawnCircle(width * 0.78, height * 0.75, 8, 'food');
+            spawnCircle(width * 0.52, height * 0.18, 6, 'food');
+
+            // Plaats een subtiele natuurlijke rotswand tussen nest en een voedselbron
+            const wallX = Math.floor(width * 0.52);
+            const startY = Math.floor(height * 0.35);
+            const endY = Math.floor(height * 0.68);
+            for (let y = startY; y < endY; y += scale) {
+                spawnCircle(wallX + Math.sin(y * 0.05) * 12, y, 3, 'wall');
+            }
+        }
+
+        function spawnCircle(cx, cy, radiusInCells, type) {
+            const gx = Math.floor(cx / scale);
+            const gy = Math.floor(cy / scale);
+            for (let y = -radiusInCells; y <= radiusInCells; y++) {
+                for (let x = -radiusInCells; x <= radiusInCells; x++) {
+                    if (x * x + y * y <= radiusInCells * radiusInCells) {
+                        const nx = gx + x;
+                        const ny = gy + y;
+                        if (nx > 1 && nx < cols - 1 && ny > 1 && ny < rows - 1) {
+                            const idx = ny * cols + nx;
+                            // Voorkom tekenen bovenop het nest
+                            if (Math.hypot(nx * scale - nest.x, ny * scale - nest.y) < nest.radius + 10) continue;
+
+                            if (type === 'food') {
+                                walls[idx] = 0;
+                                foodGrid[idx] = 8;
+                            } else if (type === 'wall') {
+                                foodGrid[idx] = 0;
+                                walls[idx] = 1;
+                                homePheromones[idx] = 0;
+                                foodPheromones[idx] = 0;
+                            } else if (type === 'erase') {
+                                walls[idx] = 0;
+                                foodGrid[idx] = 0;
+                                homePheromones[idx] = 0;
+                                foodPheromones[idx] = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function syncAntCount() {
+            while (ants.length < targetAntCount) {
+                ants.push(new Ant());
+            }
+            if (ants.length > targetAntCount) {
+                ants.length = targetAntCount;
+            }
+        }
+
+        function setTool(tool) {
+            currentTool = tool;
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            const activeBtn = document.getElementById(`tool-${tool}`);
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+
+        function clearPheromones() {
+            homePheromones.fill(0);
+            foodPheromones.fill(0);
+        }
+
+        function resetSim() {
+            collectedFood = 0;
+            initGrid(false);
+            ants.length = 0;
+            syncAntCount();
+        }
+
+        function spawnMaze() {
+            homePheromones.fill(0);
+            foodPheromones.fill(0);
+            walls.fill(0);
+            foodGrid.fill(0);
+
+            nest.x = Math.floor(width * 0.15);
+            nest.y = Math.floor(height * 0.5);
+
+            // Twee barrières met doorgangen (kortste pad test)
+            const x1 = Math.floor(width * 0.42);
+            const x2 = Math.floor(width * 0.68);
+            for (let y = 0; y < height; y += scale) {
+                if (Math.abs(y - height * 0.28) > 38) spawnCircle(x1, y, 2, 'wall');
+                if (Math.abs(y - height * 0.72) > 42 && Math.abs(y - height * 0.22) > 35) spawnCircle(x2, y, 2, 'wall');
+            }
+
+            spawnCircle(width * 0.86, height * 0.5, 9, 'food');
+            ants.forEach(a => a.reset());
+        }
+
+        function togglePause() {
+            isPaused = !isPaused;
+            const btn = document.getElementById('btnPause');
+            btn.textContent = isPaused ? 'Hervat' : 'Pauzeer';
+            btn.className = isPaused
+                ? 'px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition'
+                : 'px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold transition';
+        }
+
+        // Mouse & Touch interactie
+        let isDrawing = false;
+        let activeButton = 0;
+
+        function handlePointer(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            const mx = clientX - rect.left;
+            const my = clientY - rect.top;
+
+            if (activeButton === 2) {
+                spawnCircle(mx, my, 4, 'food');
+                return;
+            }
+
+            if (currentTool === 'nest') {
+                nest.x = Math.min(width - nest.radius, Math.max(nest.radius, mx));
+                nest.y = Math.min(height - nest.radius, Math.max(nest.radius, my));
+            } else if (currentTool === 'food') {
+                spawnCircle(mx, my, 4, 'food');
+            } else if (currentTool === 'wall') {
+                spawnCircle(mx, my, 3, 'wall');
+            } else if (currentTool === 'erase') {
+                spawnCircle(mx, my, 5, 'erase');
+            }
+        }
+
+        canvas.addEventListener('mousedown', e => {
+            isDrawing = true;
+            activeButton = e.button;
+            handlePointer(e.clientX, e.clientY);
+        });
+        window.addEventListener('mouseup', () => isDrawing = false);
+        canvas.addEventListener('mousemove', e => {
+            if (isDrawing) handlePointer(e.clientX, e.clientY);
+        });
+        canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+        // Touch support
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            isDrawing = true;
+            activeButton = 0;
+            const t = e.touches[0];
+            handlePointer(t.clientX, t.clientY);
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (!isDrawing) return;
+            const t = e.touches[0];
+            handlePointer(t.clientX, t.clientY);
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => isDrawing = false);
+
+        // UI Sliders koppelen
+        document.getElementById('sliderAnts').addEventListener('input', e => {
+            targetAntCount = parseInt(e.target.value, 10);
+            document.getElementById('valAnts').textContent = targetAntCount;
+            syncAntCount();
+        });
+
+        document.getElementById('sliderEvap').addEventListener('input', e => {
+            const v = parseInt(e.target.value, 10);
+            evaporationRate = v / 1000;
+            const label = v < 988 ? 'Snel' : (v > 995 ? 'Langzaam' : 'Normaal');
+            document.getElementById('valEvap').textContent = `${label} (${evaporationRate.toFixed(3)})`;
+        });
+
+        document.getElementById('sliderSensor').addEventListener('input', e => {
+            sensorDistance = parseInt(e.target.value, 10);
+            document.getElementById('valSensor').textContent = `${sensorDistance} px`;
+        });
+
+        document.getElementById('sliderWander').addEventListener('input', e => {
+            wanderStrength = parseInt(e.target.value, 10) / 100;
+            document.getElementById('valWander').textContent = wanderStrength.toFixed(2);
+        });
+
+        document.getElementById('toggleAnts').addEventListener('change', e => {
+            showAnts = e.target.checked;
+        });
+
+        window.addEventListener('resize', () => {
+            initGrid(true);
+        });
+
+        let lastTime = performance.now();
+        let frames = 0;
+
+        function renderAndStep() {
+            frames++;
+            const now = performance.now();
+            if (now - lastTime >= 500) {
+                const fps = Math.round((frames * 1000) / (now - lastTime));
+                document.getElementById('fpsCounter').textContent = `${fps} FPS`;
+                frames = 0;
+                lastTime = now;
+
+                // Update statistieken
+                document.getElementById('statFood').textContent = collectedFood;
+                let carriers = 0;
+                for (let i = 0; i < ants.length; i++) {
+                    if (ants[i].hasFood) carriers++;
+                }
+                const pct = ants.length ? Math.round((carriers / ants.length) * 100) : 0;
+                document.getElementById('statCarriers').textContent = `${pct}%`;
+            }
+
+            if (!isPaused) {
+                for (let i = 0; i < ants.length; i++) {
+                    ants[i].update();
+                }
+            }
+
+            // Render het feromonen-, voedsel- en murenraster via ImageData
+            const data = gridImgData.data;
+            const totalCells = cols * rows;
+
+            for (let i = 0; i < totalCells; i++) {
+                if (!isPaused) {
+                    homePheromones[i] *= evaporationRate;
+                    foodPheromones[i] *= evaporationRate;
+                }
+
+                const pIdx = i * 4;
+
+                if (walls[i] === 1) {
+                    data[pIdx] = 51;
+                    data[pIdx + 1] = 65;
+                    data[pIdx + 2] = 85;
+                    data[pIdx + 3] = 255;
+                } else if (foodGrid[i] > 0) {
+                    const intensity = Math.min(255, 110 + foodGrid[i] * 18);
+                    data[pIdx] = 16;
+                    data[pIdx + 1] = intensity;
+                    data[pIdx + 2] = 95;
+                    data[pIdx + 3] = 255;
+                } else {
+                    const hp = homePheromones[i];
+                    const fp = foodPheromones[i];
+
+                    // Achtergrondkleur (#07080c) gemengd met feromonen
+                    data[pIdx] = Math.min(255, 7 + Math.floor(fp * 245) + Math.floor(hp * 15));
+                    data[pIdx + 1] = Math.min(255, 8 + Math.floor(fp * 75) + Math.floor(hp * 145));
+                    data[pIdx + 2] = Math.min(255, 12 + Math.floor(hp * 240) + Math.floor(fp * 50));
+                    data[pIdx + 3] = 255;
+                }
+            }
+
+            gridCtx.putImageData(gridImgData, 0, 0);
+
+            // Schaal het raster op naar het volledige canvas
+            ctx.imageSmoothingEnabled = true;
+            ctx.drawImage(gridCanvas, 0, 0, width, height);
+
+            // Teken het mierenest met subtiele gloed
+            const grad = ctx.createRadialGradient(nest.x, nest.y, 4, nest.x, nest.y, nest.radius + 8);
+            grad.addColorStop(0, '#f59e0b');
+            grad.addColorStop(0.65, '#b45309');
+            grad.addColorStop(1, 'rgba(180, 83, 9, 0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(nest.x, nest.y, nest.radius + 8, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#451a03';
+            ctx.beginPath();
+            ctx.arc(nest.x, nest.y, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Teken alle mieren
+            if (showAnts) {
+                for (let i = 0; i < ants.length; i++) {
+                    ants[i].draw();
+                }
+            }
+
+            requestAnimationFrame(renderAndStep);
+        }
+
+        window.onload = function () {
+            initGrid(false);
+            syncAntCount();
+            renderAndStep();
+        };
+    </script>
+</body>
+</html>
